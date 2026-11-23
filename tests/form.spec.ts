@@ -138,7 +138,7 @@ test.describe("'Other' topic input", () => {
 
     await expect(f.other).toHaveValue("x".repeat(50));
     await expect(page.getByText("50 of 50 characters used")).toBeVisible();
-    await expect(f.other).toHaveAccessibleDescription(/Up to 50 characters/);
+    await expect(f.other).toHaveAccessibleDescription(/50 of 50 characters used/);
   });
 
   test("accepts exactly 50 characters", async ({ page }) => {

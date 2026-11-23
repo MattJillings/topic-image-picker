@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import TopicForm from "@/components/TopicForm";
-import ImageReview, { type ReviewStatus } from "@/components/ImageReview";
+import ImageReview from "@/components/ImageReview";
 import ProfileCard from "@/components/ProfileCard";
+import { appReducer, initialState, type View } from "@/lib/appState";
 import type { ApiError, ImagePage, UnsplashImage, UserDetails } from "@/lib/types";
-
-type View = "form" | "review" | "card";
 
 const TITLES: Record<View, string> = {
   form: "Find your image",
@@ -65,14 +64,12 @@ function saveRejected(ids: Set<string>) {
 }
 
 export default function Home() {
-  const [view, setView] = useState<View>("form");
-  const [details, setDetails] = useState<UserDetails | null>(null);
-  const [image, setImage] = useState<UnsplashImage | null>(null);
-  const [status, setStatus] = useState<ReviewStatus>("loading");
-  const [error, setError] = useState<string | null>(null);
-  // Bumped when history restores the form, so it remounts with the restored values.
-  const [formKey, setFormKey] = useState(0);
+  // All on-screen state lives in one reducer (see src/lib/appState.ts).
+  const [state, dispatch] = useReducer(appReducer, initialState);
+  const { view, details, image, status, error, formKey } = state;
 
+  // Refs hold non-visual bookkeeping that must not trigger re-renders: in-flight request tracking,
+  // the per-topic result queue, and the session's rejected image IDs.
   const requestId = useRef(0);
   const feedRef = useRef<Feed | null>(null);
   const rejectedRef = useRef<Set<string> | null>(null);
@@ -94,8 +91,7 @@ export default function Home() {
   /** Shows the next image for `topic` that hasn't been rejected this session, fetching more pages as needed. */
   const showNext = useCallback(async (topic: string) => {
     const id = ++requestId.current; // ignore stale responses if the user navigates or clicks quickly
-    setStatus("loading");
-    setError(null);
+    dispatch({ type: "LOADING" });
 
     if (feedRef.current?.topic !== topic) {
       feedRef.current = { topic, queue: [], nextPage: 1, totalPages: null, total: null };
@@ -107,14 +103,12 @@ export default function Home() {
       const next = feed.queue.shift();
       if (next) {
         if (seen.has(next.id)) continue;
-        setImage(next);
-        setStatus("ready");
+        dispatch({ type: "IMAGE_SHOWN", image: next });
         return;
       }
 
       if (feed.totalPages !== null && feed.nextPage > feed.totalPages) {
-        setImage(null);
-        setStatus(feed.total === 0 ? "empty" : "exhausted");
+        dispatch({ type: "NO_MORE_IMAGES", reason: feed.total === 0 ? "empty" : "exhausted" });
         return;
       }
 
@@ -126,9 +120,11 @@ export default function Home() {
 
         if (!res.ok || !data || "error" in data) {
           const apiError = data && "error" in data ? data : null;
-          setImage(null);
-          setStatus(apiError?.code === "rate_limited" || res.status === 429 ? "rate_limited" : "error");
-          setError(apiError?.error ?? "We couldn't load images right now. Please try again.");
+          dispatch({
+            type: "LOAD_FAILED",
+            status: apiError?.code === "rate_limited" || res.status === 429 ? "rate_limited" : "error",
+            message: apiError?.error ?? "We couldn't load images right now. Please try again.",
+          });
           return;
         }
 
@@ -140,39 +136,24 @@ export default function Home() {
         if (data.images.length === 0) feed.totalPages = Math.min(feed.totalPages, feed.nextPage - 1);
       } catch {
         if (id !== requestId.current) return;
-        setImage(null);
-        setStatus("error");
-        setError("Network error. Please check your connection and try again.");
+        dispatch({
+          type: "LOAD_FAILED",
+          status: "error",
+          message: "Network error. Please check your connection and try again.",
+        });
         return;
       }
     }
   }, []);
 
-  /** Redraws the step described by a history entry (used for Back/Forward and reloads). */
+  /** Redraws the step described by a history entry (used for Back/Forward). */
   const applyEntry = useCallback(
     (entry: HistoryEntry) => {
       requestId.current++; // cancel any in-flight image request from the step we're leaving
-      setDetails(entry.details);
-      setError(null);
-
-      if (entry.view === "card" && entry.details && entry.image) {
-        setImage(entry.image);
-        setView("card");
-      } else if (entry.view === "review" && entry.details) {
-        setView("review");
-        // Re-show the image that was on screen, unless it has since been rejected.
-        if (entry.image && !rejected().has(entry.image.id)) {
-          setImage(entry.image);
-          setStatus("ready");
-        } else {
-          setImage(null);
-          void showNext(entry.details.topic);
-        }
-      } else {
-        setImage(null);
-        setFormKey((k) => k + 1);
-        setView("form");
-      }
+      // Never bring back an image that has since been rejected.
+      const image = entry.image && !rejected().has(entry.image.id) ? entry.image : null;
+      dispatch({ type: "RESTORED", view: entry.view, details: entry.details, image });
+      if (entry.view === "review" && entry.details && !image) void showNext(entry.details.topic);
     },
     [showNext],
   );
@@ -197,9 +178,7 @@ export default function Home() {
   }, [view, details, image]);
 
   function handleSubmit(next: UserDetails) {
-    setDetails(next);
-    setImage(null);
-    setView("review");
+    dispatch({ type: "SUBMITTED", details: next });
     // Record the submitted values on the form's entry, so Back shows them filled in.
     writeEntry({ view: "form", details: next, image: null }, "replace");
     writeEntry({ view: "review", details: next, image: null }, "push");
@@ -233,22 +212,19 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: image.id }),
     }).catch(() => {});
-    setView("card");
+    dispatch({ type: "ACCEPTED" });
     writeEntry({ view: "card", details, image }, "push");
   }
 
   function handleStartOver() {
     requestId.current++;
-    setDetails(null);
-    setImage(null);
-    setError(null);
-    setView("form");
+    dispatch({ type: "STARTED_OVER" });
     writeEntry({ view: "form", details: null, image: null }, "push");
   }
 
   function handleBack() {
     requestId.current++;
-    setView("form");
+    dispatch({ type: "WENT_BACK" });
     writeEntry({ view: "form", details, image: null }, "push");
   }
 

@@ -25,7 +25,8 @@ Navigation is state-driven (`form → review → card`) inside a single client c
 
 | Path | Purpose |
 | --- | --- |
-| `src/app/page.tsx` | View state, image paging/queue, session-level rejected-image tracking, focus management |
+| `src/app/page.tsx` | Wires the reducer to side effects: image fetching/paging, rejected-image tracking, browser history, focus management |
+| `src/lib/appState.ts` | App state: the `useReducer` state shape, actions and pure reducer |
 | `src/components/TopicForm.tsx` | Form with per-field validation, required-field asterisks and the conditional "Other" input |
 | `src/components/ImageReview.tsx` | Image preview with Accept / Reject and loading, error, rate-limit and empty states |
 | `src/components/ProfileCard.tsx` | Final card with name, surname, thumbnail and attribution |
@@ -52,6 +53,19 @@ Navigation is state-driven (`form → review → card`) inside a single client c
   - reduced-motion preferences are respected
 
 The app follows the [Unsplash API guidelines](https://help.unsplash.com/en/articles/2511245-unsplash-api-guidelines): images are hotlinked with plain `<img>` tags (not proxied through `next/image`), the photographer and Unsplash are credited with UTM links wherever a photo appears, and downloads are tracked on accept.
+
+## State management
+
+The app uses React's built-in **`useReducer`**, with the reducer kept in its own module.
+
+- **One source of truth.** Everything that decides what's on screen lives in one state object in `src/lib/appState.ts`: the current step, the user's details, the current image, the loading/error status and the error message. `page.tsx` owns it.
+- **Named actions, pure transitions.** Components never set state directly. User actions and async results become actions such as `SUBMITTED`, `LOADING`, `IMAGE_SHOWN`, `LOAD_FAILED`, `NO_MORE_IMAGES`, `ACCEPTED`, `WENT_BACK`, `STARTED_OVER` and `RESTORED` (browser Back/Forward). The reducer is a pure function, so every transition is explicit and unit-tested without a browser. It also enforces rules in one place, e.g. you can only accept an image that's ready.
+- **Side effects stay outside the reducer.** Fetching images, writing browser history, sessionStorage and focus management live in `page.tsx` and dispatch actions with their results.
+- **Refs for bookkeeping.** Data that doesn't affect rendering is kept in `useRef`, so it doesn't cause re-renders: the in-flight request ID, the queue of upcoming results and the set of rejected image IDs.
+- **Local state where it belongs.** The form's in-progress field values and validation errors are local to `TopicForm`. They only matter while typing and are handed up on submit.
+- **No prop drilling.** Each view gets only the data it renders plus callbacks, one level deep, and no component passes props through just to reach a child.
+
+**Why not Context, Redux or Zustand?** The component tree is only two levels deep and the state belongs to one page, so a global store or Context provider would add indirection without solving a real problem. If the app grew more pages or deeper trees that needed this state, the reducer could be put behind a Context provider, or moved to a store like Zustand or Redux Toolkit, without rewriting its logic.
 
 ## Access key handling: server-side proxy vs client-side key
 
@@ -99,6 +113,7 @@ The Playwright tests in `tests/` mock `/api/image` and the Unsplash CDN in the b
 | `tests/form.spec.ts` | Required fields, trimming, whitespace-only input, focus on the first invalid field, asterisks and required-fields note, live re-validation, the "Other" field (shown only when selected, required, 50-character cap) |
 | `tests/flow.spec.ts` | Submit → accept → card, edit details, reject without repeats (including after a reload), loading, error, network failure, rate-limit, empty and "all seen" states, broken images, hotlinking and attribution |
 | `tests/history.spec.ts` | Browser Back/Forward between steps (values and image restored, no reload, rejected images stay hidden, Back after Start over) |
+| `tests/unit/appState.spec.ts` | Unit tests for the state reducer (no browser) |
 | `tests/accessibility.spec.ts` | axe-core WCAG 2.2 AA scan of every view, keyboard-only completion of the flow, focus moved on view change, visible focus indicator |
 
 After a run, `npx playwright show-report` opens the HTML report.

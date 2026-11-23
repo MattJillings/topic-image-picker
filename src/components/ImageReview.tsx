@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import Attribution from "@/components/Attribution";
+import type { ReviewStatus } from "@/lib/appState";
 import type { UnsplashImage } from "@/lib/types";
-
-export type ReviewStatus = "loading" | "ready" | "error" | "rate_limited" | "empty" | "exhausted";
 
 interface ImageReviewProps {
   topic: string;

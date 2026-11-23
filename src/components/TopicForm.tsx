@@ -172,7 +172,7 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
         <div className="space-y-1.5">
           {label("other", "Your topic")}
           <p id="field-other-hint" className="text-sm text-slate-600">
-            For example Mountains, Coffee or Architecture. Up to {MAX_TOPIC_LENGTH} characters.
+            For example Mountains, Coffee or Architecture.
           </p>
           <input
             id={fieldId("other")}
