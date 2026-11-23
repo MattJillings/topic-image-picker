@@ -12,10 +12,10 @@ export default function ProfileCard({ details, image, onStartOver }: ProfileCard
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+          <div className="relative h-40 w-40 shrink-0 overflow-hidden rounded-lg bg-slate-100">
             {/* Hotlinked Unsplash thumbnail, as required by the Unsplash API guidelines. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image.urls.thumb} alt={image.alt} className="h-full w-full object-cover" />
+            <img src={image.urls.small} alt={image.alt} className="h-full w-full object-cover" />
           </div>
           <dl className="min-w-0 space-y-1">
             <div className="flex gap-2">
@@ -38,7 +38,7 @@ export default function ProfileCard({ details, image, onStartOver }: ProfileCard
       <button
         type="button"
         onClick={onStartOver}
-        className="w-full rounded-lg border border-slate-500 bg-white px-4 py-2.5 font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+        className="w-full rounded-lg rounded-tr-none rounded-bl-none border border-slate-500 bg-white px-4 py-2.5 font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
       >
         Start over
       </button>

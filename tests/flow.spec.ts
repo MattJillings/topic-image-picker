@@ -17,7 +17,7 @@ test("submit → accept → card, with focus moved to each new view's heading", 
 
   await page.getByRole("button", { name: "Accept" }).click();
 
-  await expect(heading(page)).toHaveText("Your card");
+  await expect(heading(page)).toHaveText("Your chosen image");
   await expect(heading(page)).toBeFocused();
   await expect(page.getByText("Ada", { exact: true })).toBeVisible();
   await expect(page.getByText("Lovelace", { exact: true })).toBeVisible();
@@ -28,7 +28,7 @@ test("submit → accept → card, with focus moved to each new view's heading", 
   await expect.poll(() => api.downloads).toEqual([{ id: "photo-1" }]);
 
   await page.getByRole("button", { name: "Start over" }).click();
-  await expect(heading(page)).toHaveText("Tell us about yourself");
+  await expect(heading(page)).toHaveText("Find your image");
   await expect(heading(page)).toBeFocused();
   await expect(fields(page).name).toHaveValue("");
 });
@@ -38,7 +38,7 @@ test("'Edit details' returns to the form with values kept", async ({ page }) => 
   await submitForm(page, "Other", "Mountains");
   await page.getByRole("button", { name: "Edit details" }).click();
 
-  await expect(heading(page)).toHaveText("Tell us about yourself");
+  await expect(heading(page)).toHaveText("Find your image");
   await expect(fields(page).name).toHaveValue("Ada");
   await expect(fields(page).surname).toHaveValue("Lovelace");
   await expect(fields(page).topic).toHaveValue("Other");
@@ -90,7 +90,7 @@ test.describe("Reject", () => {
     await expect(page.getByRole("button", { name: "Accept" })).toHaveAttribute("aria-disabled", "true");
 
     await page.getByRole("button", { name: "Change topic" }).click();
-    await expect(heading(page)).toHaveText("Tell us about yourself");
+    await expect(heading(page)).toHaveText("Find your image");
   });
 });
 

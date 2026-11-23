@@ -19,7 +19,7 @@ interface ImageReviewProps {
 }
 
 const buttonBase =
-  "rounded-lg px-4 py-2.5 font-semibold shadow-sm transition aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+  "rounded-lg rounded-tr-none rounded-bl-none px-4 py-2.5 font-semibold shadow-sm transition aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 export default function ImageReview({
   topic,
@@ -134,7 +134,7 @@ export default function ImageReview({
           type="button"
           onClick={() => canAccept && onAccept()}
           aria-disabled={!canAccept || undefined}
-          className={`${buttonBase} bg-emerald-700 text-white hover:bg-emerald-800`}
+          className={`${buttonBase} bg-brand text-white hover:bg-brand-dark`}
         >
           Accept
         </button>

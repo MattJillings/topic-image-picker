@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { MAX_TOPIC_LENGTH, TOPICS, type Topic, type UserDetails } from "@/lib/types";
 
 interface TopicFormProps {
@@ -55,15 +55,16 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
   const [values, setValues] = useState<Values>(() => initialValuesFrom(initialValues));
   const [errors, setErrors] = useState<Errors>({});
   const [submitted, setSubmitted] = useState(false);
-  const [summaryKey, setSummaryKey] = useState(0);
-  const summaryRef = useRef<HTMLDivElement>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
 
-  const errorList = FIELD_ORDER.filter((f) => errors[f]).map((f) => [f, errors[f]!] as const);
-
-  // After a failed submit, move focus to the error summary so it is announced (GOV.UK pattern).
+  // After a failed submit, move focus to the first invalid field. This runs after render, so the
+  // field's error is already linked via aria-describedby and screen readers announce it with the label.
   useEffect(() => {
-    if (summaryKey > 0) summaryRef.current?.focus();
-  }, [summaryKey]);
+    if (focusRequest === 0) return;
+    const first = FIELD_ORDER.find((f) => errors[f]);
+    if (first) document.getElementById(fieldId(first))?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a new failed submit, not on every edit
+  }, [focusRequest]);
 
   function update<K extends keyof Values>(key: K, value: Values[K]) {
     const next = { ...values, [key]: value };
@@ -79,7 +80,7 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      setSummaryKey((k) => k + 1);
+      setFocusRequest((n) => n + 1);
       return;
     }
 
@@ -88,11 +89,6 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
       surname: values.surname.trim(),
       topic: values.topic === "Other" ? values.other.trim() : values.topic,
     });
-  }
-
-  function focusField(e: React.MouseEvent<HTMLAnchorElement>, f: Field) {
-    e.preventDefault();
-    document.getElementById(fieldId(f))?.focus();
   }
 
   const describedBy = (f: Field, extra?: string) =>
@@ -108,44 +104,19 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
 
   const label = (field: Field, children: React.ReactNode) => (
     <label htmlFor={fieldId(field)} className="block text-sm font-medium text-slate-800">
-      {children} <span className="font-normal text-slate-600">(required)</span>
+      {children}
+      {/* Visual marker only: the field's `required` attribute tells assistive tech it's required. */}
+      <span aria-hidden="true" className="ml-0.5">
+        *
+      </span>
     </label>
   );
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-5" aria-describedby="form-intro">
-      <p id="form-intro" className="text-sm text-slate-600">
-        All fields are required.
-      </p>
-
-      {errorList.length > 0 && (
-        <div
-          key={summaryKey}
-          ref={summaryRef}
-          tabIndex={-1}
-          role="alert"
-          aria-labelledby="error-summary-title"
-          className="rounded-lg border-2 border-red-700 bg-red-50 p-4"
-        >
-          <h2 id="error-summary-title" className="font-semibold text-red-800">
-            There {errorList.length === 1 ? "is a problem" : `are ${errorList.length} problems`}
-          </h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-            {errorList.map(([f, msg]) => (
-              <li key={f}>
-                <a href={`#${fieldId(f)}`} onClick={(e) => focusField(e, f)} className="text-red-800 underline">
-                  {msg}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-1.5">
           {label("name", "Name")}
-          {fieldError("name")}
           <input
             id={fieldId("name")}
             className={inputClass(!!errors.name)}
@@ -156,10 +127,10 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
             aria-invalid={!!errors.name}
             aria-describedby={describedBy("name")}
           />
+          {fieldError("name")}
         </div>
         <div className="space-y-1.5">
           {label("surname", "Surname")}
-          {fieldError("surname")}
           <input
             id={fieldId("surname")}
             className={inputClass(!!errors.surname)}
@@ -170,12 +141,12 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
             aria-invalid={!!errors.surname}
             aria-describedby={describedBy("surname")}
           />
+          {fieldError("surname")}
         </div>
       </div>
 
       <div className="space-y-1.5">
         {label("topic", "Preferred topic")}
-        {fieldError("topic")}
         <select
           id={fieldId("topic")}
           className={inputClass(!!errors.topic)}
@@ -194,6 +165,7 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
             </option>
           ))}
         </select>
+        {fieldError("topic")}
       </div>
 
       {values.topic === "Other" && (
@@ -202,7 +174,6 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
           <p id="field-other-hint" className="text-sm text-slate-600">
             For example Mountains, Coffee or Architecture. Up to {MAX_TOPIC_LENGTH} characters.
           </p>
-          {fieldError("other")}
           <input
             id={fieldId("other")}
             className={inputClass(!!errors.other)}
@@ -213,6 +184,7 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
             aria-invalid={!!errors.other}
             aria-describedby={describedBy("other", "field-other-hint field-other-count")}
           />
+          {fieldError("other")}
           <p id="field-other-count" className="text-sm text-slate-600">
             {values.other.length} of {MAX_TOPIC_LENGTH} characters used
           </p>
@@ -221,10 +193,14 @@ export default function TopicForm({ initialValues, onSubmit }: TopicFormProps) {
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+        className="w-full rounded-lg rounded-tr-none rounded-bl-none bg-brand px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-brand-dark"
       >
         Find an image
       </button>
+
+      <p className="text-sm text-slate-600">
+        <span aria-hidden="true">*</span> Required fields
+      </p>
     </form>
   );
 }

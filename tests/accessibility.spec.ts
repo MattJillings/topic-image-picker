@@ -29,7 +29,7 @@ test("review and card views have no axe violations", async ({ page }) => {
   await expectNoViolations(page);
 
   await page.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your card");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your chosen image");
   await expectNoViolations(page);
 });
 
@@ -66,7 +66,7 @@ test("the whole flow can be completed with the keyboard only", async ({ page }) 
   await kb.press("Tab");
   await expect(page.getByRole("button", { name: "Accept" })).toBeFocused();
   await kb.press("Space");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your card");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your chosen image");
 });
 
 test("focused controls have a visible focus indicator", async ({ page }) => {

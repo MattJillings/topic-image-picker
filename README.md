@@ -21,12 +21,12 @@ The demo tier allows 50 requests/hour.
 
 ## How it works
 
-Navigation is state-driven (`form → review → card`) inside a single client component.
+Navigation is state-driven (`form → review → card`) inside a single client component. Each step is also pushed onto the browser history (`history.pushState`, merged with Next.js's own history state). The browser's Back and Forward buttons move between steps without a page reload. They restore the entered details and the image that was on screen, and never bring back a rejected image. A reload starts again at the form.
 
 | Path | Purpose |
 | --- | --- |
 | `src/app/page.tsx` | View state, image paging/queue, session-level rejected-image tracking, focus management |
-| `src/components/TopicForm.tsx` | Form with per-field validation, error summary and the conditional "Other" input |
+| `src/components/TopicForm.tsx` | Form with per-field validation, required-field asterisks and the conditional "Other" input |
 | `src/components/ImageReview.tsx` | Image preview with Accept / Reject and loading, error, rate-limit and empty states |
 | `src/components/ProfileCard.tsx` | Final card with name, surname, thumbnail and attribution |
 | `src/components/Attribution.tsx` | "Photo by X on Unsplash" credit |
@@ -41,7 +41,8 @@ Navigation is state-driven (`form → review → card`) inside a single client c
 - **States:** loading, network/API errors (with "Try again"), Unsplash rate limiting (403/429), no results, and "all images seen". A photo that fails to load is skipped.
 - **Accessibility (WCAG 2.2 AA):**
   - every input has a label, and required fields are marked
-  - errors are announced through an error summary and linked to each field with `aria-describedby`
+  - required fields are marked with an asterisk (explained by a "* Required fields" note) and the `required` attribute
+  - errors appear beside each field and are linked to it with `aria-describedby`; on a failed submit, focus moves to the first invalid field so its error is announced
   - focus is visible everywhere
   - focus moves to the heading when the view changes
   - status changes are announced through live regions
@@ -95,8 +96,9 @@ The Playwright tests in `tests/` mock `/api/image` and the Unsplash CDN in the b
 
 | File | Covers |
 | --- | --- |
-| `tests/form.spec.ts` | Required fields, trimming, whitespace-only input, error summary and links, live re-validation, the "Other" field (shown only when selected, required, 50-character cap) |
+| `tests/form.spec.ts` | Required fields, trimming, whitespace-only input, focus on the first invalid field, asterisks and required-fields note, live re-validation, the "Other" field (shown only when selected, required, 50-character cap) |
 | `tests/flow.spec.ts` | Submit → accept → card, edit details, reject without repeats (including after a reload), loading, error, network failure, rate-limit, empty and "all seen" states, broken images, hotlinking and attribution |
+| `tests/history.spec.ts` | Browser Back/Forward between steps (values and image restored, no reload, rejected images stay hidden, Back after Start over) |
 | `tests/accessibility.spec.ts` | axe-core WCAG 2.2 AA scan of every view, keyboard-only completion of the flow, focus moved on view change, visible focus indicator |
 
 After a run, `npx playwright show-report` opens the HTML report.

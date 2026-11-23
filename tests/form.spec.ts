@@ -6,25 +6,25 @@ test.describe("Topic form validation", () => {
     await page.goto("/");
   });
 
-  test("all fields are required: empty submit shows an error summary and per-field errors", async ({ page }) => {
+  test("all fields are required: empty submit highlights each field, with no summary box", async ({ page }) => {
     const api = await mockApi(page);
     await page.getByRole("button", { name: "Find an image" }).click();
-
-    const summary = page.getByRole("alert").filter({ hasText: "There are 3 problems" });
-    await expect(summary).toBeVisible();
-    await expect(summary).toBeFocused();
-    await expect(summary.getByRole("link")).toHaveText(["Enter your name.", "Enter your surname.", "Choose a preferred topic."]);
 
     const f = fields(page);
     for (const field of [f.name, f.surname, f.topic]) {
       await expect(field).toHaveAttribute("aria-invalid", "true");
     }
-    // Errors are programmatically associated with their fields.
+    // Errors are shown beside, and programmatically associated with, their fields.
     await expect(f.name).toHaveAccessibleDescription(/Enter your name\./);
     await expect(f.surname).toHaveAccessibleDescription(/Enter your surname\./);
     await expect(f.topic).toHaveAccessibleDescription(/Choose a preferred topic\./);
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tell us about yourself");
+    await expect(page.getByText(/There (is a problem|are \d+ problems)/)).toHaveCount(0);
+
+    // Focus moves to the first invalid field so its error is announced.
+    await expect(f.name).toBeFocused();
+
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Find your image");
     expect(api.imageRequests).toHaveLength(0);
   });
 
@@ -35,15 +35,14 @@ test.describe("Topic form validation", () => {
     await f.topic.selectOption("Travel");
     await page.getByRole("button", { name: "Find an image" }).click();
 
-    await expect(page.getByRole("alert").filter({ hasText: "There are 2 problems" })).toBeVisible();
     await expect(f.name).toHaveAttribute("aria-invalid", "true");
     await expect(f.surname).toHaveAttribute("aria-invalid", "true");
     await expect(f.topic).toHaveAttribute("aria-invalid", "false");
   });
 
-  test("error summary links move focus to the field", async ({ page }) => {
+  test("focus goes to the first invalid field, not always the first field", async ({ page }) => {
+    await fields(page).name.fill("Ada");
     await page.getByRole("button", { name: "Find an image" }).click();
-    await page.getByRole("link", { name: "Enter your surname." }).click();
     await expect(fields(page).surname).toBeFocused();
   });
 
@@ -52,7 +51,23 @@ test.describe("Topic form validation", () => {
     await fields(page).name.fill("Ada");
 
     await expect(fields(page).name).toHaveAttribute("aria-invalid", "false");
-    await expect(page.getByRole("alert").filter({ hasText: "There are 2 problems" })).toBeVisible();
+    await expect(page.getByText("Enter your name.")).toHaveCount(0);
+    await expect(page.getByText("Enter your surname.")).toBeVisible();
+  });
+
+  test("labels show an asterisk and the required-fields note sits below the submit button", async ({ page }) => {
+    for (const text of ["Name", "Surname", "Preferred topic"]) {
+      await expect(page.locator("label", { hasText: text }).first()).toContainText("*");
+    }
+    // The asterisk is decorative; the fields themselves are marked required for assistive tech.
+    await expect(fields(page).name).toHaveAccessibleName("Name");
+    await expect(fields(page).name).toHaveAttribute("required", "");
+
+    const note = page.getByText("Required fields");
+    await expect(note).toContainText("* Required fields");
+    const buttonBox = (await page.getByRole("button", { name: "Find an image" }).boundingBox())!;
+    const noteBox = (await note.boundingBox())!;
+    expect(noteBox.y).toBeGreaterThan(buttonBox.y + buttonBox.height);
   });
 
   test("values are trimmed before use", async ({ page }) => {
@@ -101,7 +116,8 @@ test.describe("'Other' topic input", () => {
     const api = await mockApi(page);
     await submitForm(page, "Other", "    ");
 
-    await expect(page.getByRole("link", { name: "Enter your topic." })).toBeVisible();
+    await expect(page.getByText("Enter your topic.")).toBeVisible();
+    await expect(fields(page).other).toBeFocused();
     await expect(fields(page).other).toHaveAttribute("aria-invalid", "true");
     expect(api.imageRequests).toHaveLength(0);
   });

@@ -9,12 +9,35 @@ import type { ApiError, ImagePage, UnsplashImage, UserDetails } from "@/lib/type
 type View = "form" | "review" | "card";
 
 const TITLES: Record<View, string> = {
-  form: "Tell us about yourself",
+  form: "Find your image",
   review: "Do you like this image?",
-  card: "Your card",
+  card: "Your chosen image",
 };
 
 const REJECTED_KEY = "topic-image-picker:rejected";
+const HISTORY_KEY = "topicImagePicker";
+
+/** What each browser-history entry stores, so Back/Forward can redraw that step exactly. */
+interface HistoryEntry {
+  view: View;
+  details: UserDetails | null;
+  image: UnsplashImage | null;
+}
+
+function readEntry(state: unknown): HistoryEntry | null {
+  const entry = (state as Record<string, unknown> | null)?.[HISTORY_KEY] as HistoryEntry | undefined;
+  return entry && typeof entry.view === "string" ? entry : null;
+}
+
+/**
+ * Writes a history entry. Next.js keeps its own router data in history.state, so we merge into it
+ * rather than replacing it (otherwise Next treats Back as an external navigation and reloads).
+ */
+function writeEntry(entry: HistoryEntry, mode: "push" | "replace") {
+  const state = { ...(window.history.state as object | null), [HISTORY_KEY]: entry };
+  if (mode === "push") window.history.pushState(state, "");
+  else window.history.replaceState(state, "");
+}
 
 /** Per-topic paging state, so "Reject" walks through results instead of re-requesting the same ones. */
 interface Feed {
@@ -47,6 +70,8 @@ export default function Home() {
   const [image, setImage] = useState<UnsplashImage | null>(null);
   const [status, setStatus] = useState<ReviewStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  // Bumped when history restores the form, so it remounts with the restored values.
+  const [formKey, setFormKey] = useState(0);
 
   const requestId = useRef(0);
   const feedRef = useRef<Feed | null>(null);
@@ -123,10 +148,61 @@ export default function Home() {
     }
   }, []);
 
+  /** Redraws the step described by a history entry (used for Back/Forward and reloads). */
+  const applyEntry = useCallback(
+    (entry: HistoryEntry) => {
+      requestId.current++; // cancel any in-flight image request from the step we're leaving
+      setDetails(entry.details);
+      setError(null);
+
+      if (entry.view === "card" && entry.details && entry.image) {
+        setImage(entry.image);
+        setView("card");
+      } else if (entry.view === "review" && entry.details) {
+        setView("review");
+        // Re-show the image that was on screen, unless it has since been rejected.
+        if (entry.image && !rejected().has(entry.image.id)) {
+          setImage(entry.image);
+          setStatus("ready");
+        } else {
+          setImage(null);
+          void showNext(entry.details.topic);
+        }
+      } else {
+        setImage(null);
+        setFormKey((k) => k + 1);
+        setView("form");
+      }
+    },
+    [showNext],
+  );
+
+  // Browser Back/Forward: restore the step stored in that history entry. A fresh load (or reload)
+  // always starts at the form; earlier entries stay usable with Back.
+  useEffect(() => {
+    writeEntry({ view: "form", details: null, image: null }, "replace");
+
+    const onPopState = (e: PopStateEvent) => {
+      const entry = readEntry(e.state);
+      if (entry) applyEntry(entry);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyEntry]);
+
+  // Keep the current history entry up to date (e.g. after Reject swaps the image), so going Back to
+  // this step later shows what the user last saw.
+  useEffect(() => {
+    writeEntry({ view, details, image: view === "form" ? null : image }, "replace");
+  }, [view, details, image]);
+
   function handleSubmit(next: UserDetails) {
     setDetails(next);
     setImage(null);
     setView("review");
+    // Record the submitted values on the form's entry, so Back shows them filled in.
+    writeEntry({ view: "form", details: next, image: null }, "replace");
+    writeEntry({ view: "review", details: next, image: null }, "push");
     void showNext(next.topic);
   }
 
@@ -158,6 +234,7 @@ export default function Home() {
       body: JSON.stringify({ id: image.id }),
     }).catch(() => {});
     setView("card");
+    writeEntry({ view: "card", details, image }, "push");
   }
 
   function handleStartOver() {
@@ -166,11 +243,13 @@ export default function Home() {
     setImage(null);
     setError(null);
     setView("form");
+    writeEntry({ view: "form", details: null, image: null }, "push");
   }
 
   function handleBack() {
     requestId.current++;
     setView("form");
+    writeEntry({ view: "form", details, image: null }, "push");
   }
 
   return (
@@ -188,7 +267,7 @@ export default function Home() {
           {TITLES[view]}
         </h1>
 
-        {view === "form" && <TopicForm initialValues={details} onSubmit={handleSubmit} />}
+        {view === "form" && <TopicForm key={formKey} initialValues={details} onSubmit={handleSubmit} />}
 
         {view === "review" && details && (
           <ImageReview
